@@ -1,50 +1,57 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useCallback } from "react"
+import { useRouter } from "next/navigation"
+import { useWallet } from "@/contexts/WalletContext"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "sonner"
 import Image from "next/image"
-import { useRouter } from "next/navigation"
-import { useWallet } from "@/contexts/WalletContext"
-import { useNFT } from "@/contexts/NFTContext"
-import { v4 as uuidv4 } from 'uuid'
 
 export default function CreateNFTPage() {
   const router = useRouter()
   const { address } = useWallet()
-  const { addNFT } = useNFT()
-  const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formData, setFormData] = useState({
     name: "",
-    price: "",
     description: "",
-    image: null as File | null
+    price: "",
   })
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      if (!file.type.startsWith('image/')) {
-        toast.error("Invalid file type", {
-          description: "Please upload an image file"
-        })
-        return
-      }
-      setFormData(prev => ({ ...prev, image: file }))
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        setImagePreview(reader.result as string)
-      }
-      reader.readAsDataURL(file)
+  const handleImageChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error("Invalid file type", {
+        description: "Please upload an image file"
+      })
+      return
     }
-  }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("File too large", {
+        description: "Please upload an image smaller than 5MB"
+      })
+      return
+    }
+
+    setImageFile(file)
+    const url = URL.createObjectURL(file)
+    setPreviewUrl(url)
+
+    // Clean up the URL when component unmounts
+    return () => URL.revokeObjectURL(url)
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!address) {
       toast.error("Wallet not connected", {
         description: "Please connect your wallet to create an NFT"
@@ -52,7 +59,7 @@ export default function CreateNFTPage() {
       return
     }
 
-    if (!formData.image) {
+    if (!imageFile) {
       toast.error("Image required", {
         description: "Please upload an image for your NFT"
       })
@@ -61,151 +68,214 @@ export default function CreateNFTPage() {
 
     try {
       setIsSubmitting(true)
-      
-      // In a real application, you would:
-      // 1. Upload the image to IPFS or similar
-      // 2. Create the NFT contract
-      // 3. Mint the NFT
-      // For now, we'll just store it locally
 
-      const newNFT = {
-        id: uuidv4(),
-        name: formData.name,
-        description: formData.description,
-        price: formData.price,
-        imageUrl: imagePreview as string, // In production, this would be an IPFS URL
-        owner: address,
-        createdAt: new Date().toISOString()
+      // Create form data
+      const formDataToSend = new FormData()
+      formDataToSend.append('image', imageFile)
+      formDataToSend.append('name', formData.name)
+      formDataToSend.append('description', formData.description)
+      formDataToSend.append('price', formData.price)
+      formDataToSend.append('creator', address)
+
+      // Send to API
+      const response = await fetch('/api/nft/create', {
+        method: 'POST',
+        body: formDataToSend,
+      })
+
+      console.log('Response status:', response.status)
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()))
+
+      const data = await response.json()
+      console.log('Response data:', data)
+
+      if (!response.ok) {
+        console.error('API Error:', {
+          status: response.status,
+          statusText: response.statusText,
+          data
+        })
+        throw new Error(
+          typeof data.error === 'string' 
+            ? data.error 
+            : JSON.stringify(data.error) || 'Failed to create NFT'
+        )
       }
 
-      addNFT(newNFT)
+      if (!data.nft || !data.nft.id) {
+        console.error('Invalid response format:', data)
+        throw new Error('Invalid response from server')
+      }
       
-      toast.success("NFT Created!", {
+      toast.success("NFT Created", {
         description: "Your NFT has been created successfully"
       })
 
-      // Redirect to My Files page
-      router.push('/my-files')
-
+      // Redirect to the NFT detail page
+      router.push(`/my-files`)
     } catch (error) {
-      toast.error("Creation failed", {
-        description: error instanceof Error ? error.message : "Failed to create NFT"
+      console.error('Error creating NFT:', {
+        error,
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      })
+      toast.error("Failed to create NFT", {
+        description: error instanceof Error 
+          ? error.message 
+          : "Please try again later. If the problem persists, contact support."
       })
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  return (
-    <div className="container max-w-2xl mx-auto py-16 px-4">
-      <div className="text-center mb-8">
-        <h1 className="text-4xl font-bold tracking-tight mb-4">Create NFT</h1>
-        <p className="text-gray-600 dark:text-gray-400">
-          Create your unique NFT by uploading an image and providing details
-        </p>
+  if (!address) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-gray-950 dark:to-gray-900 flex flex-col items-center justify-center p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 max-w-md w-full text-center">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+            Connect Your Wallet
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400 mb-6">
+            Please connect your wallet to create an NFT
+          </p>
+        </div>
       </div>
+    )
+  }
 
-      <form onSubmit={handleSubmit} className="space-y-8">
-        {/* Image Upload */}
-        <div className="flex flex-col items-center justify-center">
-          <div className="w-full max-w-md aspect-square relative border-2 border-dashed rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-            {imagePreview ? (
-              <Image
-                src={imagePreview}
-                alt="NFT Preview"
-                fill
-                className="object-cover"
-              />
-            ) : (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="text-center">
-                  <div className="mx-auto h-12 w-12 text-gray-400">
-                    <svg
-                      className="h-12 w-12"
-                      stroke="currentColor"
-                      fill="none"
-                      viewBox="0 0 48 48"
-                      aria-hidden="true"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
-                      />
-                    </svg>
-                  </div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400 mt-2">
-                    Click to upload image
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-gray-950 dark:to-gray-900">
+      <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
+        <div className="max-w-3xl mx-auto">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8">
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-8">
+              Create New NFT
+            </h1>
+
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Image Upload */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  NFT Image
+                </label>
+                <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed rounded-lg border-gray-300 dark:border-gray-600">
+                  <div className="space-y-1 text-center">
+                    {previewUrl ? (
+                      <div className="relative w-64 h-64 mx-auto">
+                        <Image
+                          src={previewUrl}
+                          alt="Preview"
+                          fill
+                          className="rounded-lg object-cover"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="absolute bottom-2 right-2"
+                          onClick={() => {
+                            setImageFile(null)
+                            setPreviewUrl(null)
+                          }}
+                        >
+                          Change
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <svg
+                          className="mx-auto h-12 w-12 text-gray-400"
+                          stroke="currentColor"
+                          fill="none"
+                          viewBox="0 0 48 48"
+                        >
+                          <path
+                            d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
+                            strokeWidth={2}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                        <div className="flex text-sm text-gray-600 dark:text-gray-400">
+                          <label className="relative cursor-pointer rounded-md font-medium text-purple-600 dark:text-purple-400 hover:text-purple-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-purple-500">
+                            <span>Upload a file</span>
+                            <input
+                              type="file"
+                              className="sr-only"
+                              accept="image/*"
+                              onChange={handleImageChange}
+                            />
+                          </label>
+                          <p className="pl-1">or drag and drop</p>
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          PNG, JPG, GIF up to 5MB
+                        </p>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
-            )}
-            <input
-              type="file"
-              accept="image/*"
-              onChange={handleImageChange}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-              required
-            />
+
+              {/* Name */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Name
+                </label>
+                <Input
+                  required
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="Enter NFT name"
+                  className="dark:bg-gray-700"
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Description
+                </label>
+                <Textarea
+                  required
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  placeholder="Enter NFT description"
+                  className="dark:bg-gray-700"
+                  rows={4}
+                />
+              </div>
+
+              {/* Price */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Price (ETH)
+                </label>
+                <Input
+                  required
+                  type="number"
+                  step="0.001"
+                  min="0"
+                  value={formData.price}
+                  onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                  placeholder="Enter price in ETH"
+                  className="dark:bg-gray-700"
+                />
+              </div>
+
+              {/* Submit Button */}
+              <Button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white"
+              >
+                {isSubmitting ? "Creating..." : "Create NFT"}
+              </Button>
+            </form>
           </div>
         </div>
-
-        {/* Name */}
-        <div className="space-y-2">
-          <label htmlFor="name" className="block text-sm font-medium">
-            Name
-          </label>
-          <Input
-            id="name"
-            value={formData.name}
-            onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))}
-            placeholder="Enter NFT name"
-            required
-          />
-        </div>
-
-        {/* Price */}
-        <div className="space-y-2">
-          <label htmlFor="price" className="block text-sm font-medium">
-            Price (ETH)
-          </label>
-          <Input
-            id="price"
-            type="number"
-            step="0.001"
-            min="0"
-            value={formData.price}
-            onChange={e => setFormData(prev => ({ ...prev, price: e.target.value }))}
-            placeholder="Enter price in ETH"
-            required
-          />
-        </div>
-
-        {/* Description */}
-        <div className="space-y-2">
-          <label htmlFor="description" className="block text-sm font-medium">
-            Description
-          </label>
-          <Textarea
-            id="description"
-            value={formData.description}
-            onChange={e => setFormData(prev => ({ ...prev, description: e.target.value }))}
-            placeholder="Describe your NFT"
-            required
-            rows={4}
-          />
-        </div>
-
-        {/* Submit Button */}
-        <Button
-          type="submit"
-          className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white"
-          disabled={isSubmitting}
-        >
-          {isSubmitting ? "Creating..." : "Create NFT"}
-        </Button>
-      </form>
+      </div>
     </div>
   )
 } 

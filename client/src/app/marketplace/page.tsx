@@ -1,97 +1,133 @@
-import { FileCard } from "@/components/marketplace/FileCard"
+"use client"
+
+import { useState } from "react"
+import { Button } from "@/components/ui/button"
+import Image from "next/image"
+import { useWallet } from "@/contexts/WalletContext"
+import { toast } from "sonner"
 
 // Mock data for demonstration
-const files = [
+const nfts = [
   {
     id: 1,
-    title: "Financial Report Q1 2024",
-    description: "Detailed financial analysis and projections for Q1 2024",
+    name: "Digital Art #1",
+    description: "A unique piece of digital art created using AI",
     price: "0.1 ETH",
-    size: "2.5 MB",
-    type: "PDF",
-    imageUrl: "/images/financial-report.jpg"
+    imageUrl: "/images/nft1.jpg"
   },
   {
     id: 2,
-    title: "Product Design Files",
-    description: "Complete product design documentation and assets",
+    name: "Crypto Punk #2",
+    description: "Rare crypto punk with unique attributes",
     price: "0.25 ETH",
-    size: "15 MB",
-    type: "ZIP",
-    imageUrl: "/images/product-design.jpg"
+    imageUrl: "/images/nft2.jpg"
   },
   {
     id: 3,
-    title: "Market Research Data",
-    description: "Comprehensive market analysis and consumer insights",
+    name: "Abstract Collection",
+    description: "Modern abstract digital artwork",
     price: "0.15 ETH",
-    size: "8 MB",
-    type: "XLSX",
-    imageUrl: "/images/market-research.jpg"
+    imageUrl: "/images/nft3.jpg"
   },
   {
     id: 4,
-    title: "Technical Documentation",
-    description: "Complete technical specifications and API documentation",
+    name: "Digital Portrait",
+    description: "AI-generated portrait with unique style",
     price: "0.2 ETH",
-    size: "5 MB",
-    type: "PDF",
-    imageUrl: "/images/technical-docs.jpg"
+    imageUrl: "/images/nft4.jpg"
   },
   {
     id: 5,
-    title: "UI/UX Assets",
-    description: "Collection of UI components and design assets",
+    name: "3D Animation",
+    description: "Animated 3D character design",
     price: "0.3 ETH",
-    size: "25 MB",
-    type: "ZIP",
-    imageUrl: "/images/ui-assets.jpg"
+    imageUrl: "/images/nft5.jpg"
   },
   {
     id: 6,
-    title: "Sales Analytics",
-    description: "Detailed sales performance metrics and analysis",
+    name: "Pixel Art",
+    description: "Retro-style pixel art collection",
     price: "0.18 ETH",
-    size: "4 MB",
-    type: "XLSX",
-    imageUrl: "/images/sales-analytics.jpg"
+    imageUrl: "/images/nft6.jpg"
   }
 ]
 
 export default function MarketplacePage() {
+  const { address } = useWallet()
+  const [purchasingId, setPurchasingId] = useState<number | null>(null)
+
+  const handlePurchase = async (nftId: number) => {
+    if (!address) {
+      toast.error("Wallet not connected", {
+        description: "Please connect your wallet to make a purchase"
+      })
+      return
+    }
+
+    try {
+      setPurchasingId(nftId)
+      // Add your purchase logic here
+      // For example: await purchaseNFT(nftId, address)
+      
+      toast.success("Purchase Successful", {
+        description: "Your NFT has been purchased successfully"
+      })
+    } catch (error) {
+      toast.error("Purchase Failed", {
+        description: error instanceof Error ? error.message : "Failed to purchase NFT"
+      })
+    } finally {
+      setPurchasingId(null)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-gray-950 dark:to-gray-900">
       <div className="container mx-auto px-4 py-16 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-3xl text-center mb-16">
           <h1 className="text-4xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-5xl mb-6">
-            Discover Digital Assets
+            NFT Marketplace
           </h1>
           <p className="text-lg leading-8 text-gray-600 dark:text-gray-400">
-            Browse and purchase high-quality digital files securely on the blockchain.
-            Each purchase supports content creators directly.
+            Discover and collect unique digital assets on the blockchain
           </p>
         </div>
 
-        <div className="mb-16">
-          <div className="flex flex-wrap justify-center gap-4 rounded-full bg-white dark:bg-gray-800 p-2 shadow-lg dark:shadow-purple-900/20">
-            <button className="rounded-full bg-purple-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-purple-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-600 dark:bg-purple-500 dark:hover:bg-purple-400">
-              All Files
-            </button>
-            <button className="rounded-full px-6 py-2.5 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
-              Documents
-            </button>
-            <button className="rounded-full px-6 py-2.5 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
-              Designs
-            </button>
-            <button className="rounded-full px-6 py-2.5 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
-              Data
-            </button>
-          </div>
-        </div>
-
         <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
-          {files.map((file) => (
-            <FileCard key={file.id} {...file} />
+          {nfts.map((nft) => (
+            <div
+              key={nft.id}
+              className="group relative bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow duration-300"
+            >
+              <div className="aspect-square relative">
+                <Image
+                  src={nft.imageUrl}
+                  alt={nft.name}
+                  fill
+                  className="object-cover group-hover:scale-105 transition-transform duration-300"
+                />
+              </div>
+              <div className="p-6">
+                <h3 className="text-xl font-semibold mb-2 text-gray-900 dark:text-white">
+                  {nft.name}
+                </h3>
+                <p className="text-gray-600 dark:text-gray-400 text-sm mb-4 line-clamp-2">
+                  {nft.description}
+                </p>
+                <div className="flex items-center justify-between">
+                  <span className="text-purple-600 dark:text-purple-400 font-semibold">
+                    {nft.price}
+                  </span>
+                  <Button
+                    onClick={() => handlePurchase(nft.id)}
+                    disabled={purchasingId === nft.id}
+                    className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white"
+                  >
+                    {purchasingId === nft.id ? "Purchasing..." : "Purchase"}
+                  </Button>
+                </div>
+              </div>
+            </div>
           ))}
         </div>
       </div>
